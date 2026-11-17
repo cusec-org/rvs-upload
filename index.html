@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RVS Workbook Upload</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --red: #c8102e; --navy: #1a2332; --blue: #2d6be4; --blue-lt: #e8f0fd;
+    --green: #1a9e5c; --green-lt: #e6f5ed; --amber: #b86e0b; --amber-lt: #fdf2e1;
+    --bad: #b3261e; --bad-lt: #fdeceb;
+    --surface: #f5f6f8; --card: #fff; --border: #e2e5ea;
+    --text: #1a2332; --text-2: #5a6474; --text-3: #8a92a0;
+    --radius: 10px; --shadow: 0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface); color: var(--text); min-height: 100vh; }
+  header { background: var(--navy); color: #fff; padding: 0 24px; display: flex; align-items: center; gap: 14px; height: 60px; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+  header img { height: 40px; width: auto; }
+  header h1 { font-size: 16px; font-weight: 600; flex: 1; }
+  #user-name { font-size: 13px; opacity: .85; }
+  .btn { padding: 9px 18px; border-radius: 7px; border: 0; background: var(--blue); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.ghost { background: transparent; border: 1.5px solid rgba(255,255,255,.4); color: #fff; padding: 6px 14px; font-weight: 500; }
+  .btn.save { background: var(--green); }
+  .btn.plain { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 16px; }
+  h2 { font-size: 17px; margin-bottom: 8px; }
+  p { line-height: 1.5; color: var(--text-2); }
+  .steps { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .step { font-size: 13px; padding: 5px 12px; border-radius: 99px; background: #fff; border: 1px solid var(--border); color: var(--text-3); }
+  .step.on { background: var(--blue-lt); border-color: var(--blue); color: var(--blue); font-weight: 600; }
+  .step.done { color: var(--green); border-color: var(--green); }
+  .pick { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .banner { padding: 11px 14px; border-radius: 8px; margin-bottom: 14px; line-height: 1.45; font-size: 14px; }
+  .banner.err { background: var(--bad-lt); color: var(--bad); }
+  .banner.warn { background: var(--amber-lt); color: var(--amber); }
+  .banner.ok { background: var(--green-lt); color: var(--green); }
+  .stats { display: flex; gap: 26px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .stats div { font-size: 13px; color: var(--text-2); }
+  .stats b { display: block; font-size: 24px; color: var(--text); }
+  .meta { font-size: 13px; color: var(--text-3); margin-top: 6px; }
+  .tbl-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { border-bottom: 1px solid var(--border); padding: 8px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--text-2); font-weight: 600; background: #fafbfc; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .p-add, .p-update { background: var(--green-lt); color: var(--green); }
+  .p-skipped { background: var(--amber-lt); color: var(--amber); }
+  .p-failed { background: var(--bad-lt); color: var(--bad); }
+  .warns { margin: 0; padding-left: 16px; color: var(--text-2); }
+  .warns li { margin: 2px 0; line-height: 1.4; }
+  .err-line { color: var(--bad); }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+  .filter { font-size: 13px; color: var(--text-2); display: flex; gap: 6px; align-items: center; margin-top: 12px; }
+  .hidden { display: none !important; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 640px) { header { padding: 0 16px; } header h1 { font-size: 14px; } #user-name { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="https://cusec.org/wp-content/uploads/cropped-cusec_logo_512-270x270.png" alt="CUSEC" />
+  <h1>RVS Workbook Upload</h1>
+  <span id="user-name"></span>
+  <button class="btn ghost" id="auth-btn" type="button">Sign In</button>
+</header>
+
+<main>
+  <div class="steps" aria-label="Progress">
+    <span class="step" id="st-1">1. Sign in</span>
+    <span class="step" id="st-2">2. Preview workbook</span>
+    <span class="step" id="st-3">3. Review &amp; save</span>
+  </div>
+
+  <div id="msg"></div>
+
+  <!-- Signed out -->
+  <section class="card" id="gate">
+    <h2>Sign in with your CUSEC ArcGIS account</h2>
+    <p>Uploads are made with your own ArcGIS account, so the layer records who added or changed each building.
+       Only CUSEC staff with edit access to the RVS layer can save.</p>
+    <div class="actions"><button class="btn" id="gate-btn" type="button">Sign In</button></div>
+  </section>
+
+  <!-- Choose workbook -->
+  <section class="card hidden" id="choose">
+    <h2>Choose the CWL RVS workbook</h2>
+    <p>The workbook needs the <b>Level 1 Data</b> and <b>Level 2 Data</b> tabs. Nothing is saved at this step:
+       you'll see exactly what would be added or updated first.</p>
+    <div class="pick">
+      <input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+      <button class="btn" id="preview-btn" type="button" disabled>Preview</button>
+    </div>
+  </section>
+
+  <!-- Preview / result -->
+  <section class="card hidden" id="result">
+    <h2 id="res-title">Preview</h2>
+    <div class="stats" id="stats"></div>
+    <div class="meta" id="res-meta"></div>
+    <div id="notes"></div>
+    <label class="filter"><input type="checkbox" id="only-warn" /> Show only buildings with notes or errors</label>
+    <div class="tbl-wrap" style="margin-top:10px">
+      <table>
+        <thead><tr><th>Facility</th><th>Building</th><th>Result</th><th>OBJECTID</th><th>Notes / warnings</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button class="btn save hidden" id="confirm-btn" type="button">Save to the RVS layer</button>
+      <button class="btn plain" id="again-btn" type="button">Upload another workbook</button>
+      <span id="confirm-hint" class="meta"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+// ── Configuration ──────────────────────────────────────────────────────────
+// FUNCTION_URL: the RVS_Level1_2_Upload Lambda Function URL (see SETUP.md).
+// This page's address must be registered as a redirect URI on the ArcGIS app.
+const FUNCTION_URL      = 'YOUR_FUNCTION_URL_HERE';
+const ARCGIS_CLIENT_ID  = 'wABmvoplhiLmzBmi';          // same ArcGIS app as the RVS report pages
+const ARCGIS_PORTAL_URL = 'https://www.arcgis.com';
+const TOKEN_KEY = 'rvs_upload_token', USER_KEY = 'rvs_upload_user';
+
+let token = null, uploadId = null, lastSummary = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ── Messages / steps ───────────────────────────────────────────────────────
+function say(kind, html) { $('msg').innerHTML = html ? `<div class="banner ${kind}" role="status">${html}</div>` : ''; }
+function step(n) { [1, 2, 3].forEach(i => { $('st-' + i).className = 'step' + (i < n ? ' done' : i === n ? ' on' : ''); }); }
+function show(id, on) { $(id).classList.toggle('hidden', !on); }
+
+// ── ArcGIS sign-in (OAuth implicit flow, same pattern as the report pages) ──
+const inIframe = () => { try { return window.self !== window.top; } catch { return true; } };
+const redirectUri = () => window.location.href.split('#')[0].split('?')[0];
+function signIn() {
+  if (ARCGIS_CLIENT_ID === 'YOUR_CLIENT_ID_HERE') { alert('Set ARCGIS_CLIENT_ID at the top of this file.'); return; }
+  const url = `${ARCGIS_PORTAL_URL}/sharing/rest/oauth2/authorize?client_id=${encodeURIComponent(ARCGIS_CLIENT_ID)}`
+    + `&response_type=token&expiration=120&redirect_uri=${encodeURIComponent(redirectUri())}`;
+  if (inIframe()) {   // a redirect can't navigate an embedded frame: use a popup that posts the token back
+    const w = 540, h = 700;
+    const pop = window.open(url, 'rvs_upload_oauth', `width=${w},height=${h},left=${(screen.width - w) / 2},top=${(screen.height - h) / 2}`);
+    if (!pop) alert('The sign-in popup was blocked. Allow popups for this site and try again.');
+  } else {
+    window.location.href = url;
+  }
+}
+function signOut() {
+  token = null; uploadId = null;
+  try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USER_KEY); } catch (_) {}
+  $('user-name').textContent = ''; $('auth-btn').textContent = 'Sign In';
+  show('gate', true); show('choose', false); show('result', false); say(); step(1);
+}
+async function completeSignIn(tok) {
+  token = tok;
+  try { sessionStorage.setItem(TOKEN_KEY, tok); } catch (_) {}
+  $('auth-btn').textContent = 'Sign Out';
+  show('gate', false);
+  say('ok', '<span class="spinner"></span>Checking your account…');
+  try {
+    const r = await api({ action: 'whoami' });
+    $('user-name').textContent = r.user.fullName;
+    try { sessionStorage.setItem(USER_KEY, r.user.fullName); } catch (_) {}
+    say(); show('choose', true); step(2);
+  } catch (e) {
+    say('err', esc(e.message)); show('gate', !token); if (!token) step(1);
+  }
+}
+
+// ── Calls to the Lambda ────────────────────────────────────────────────────
+async function api(body) {
+  if (FUNCTION_URL === 'YOUR_FUNCTION_URL_HERE') throw new Error('This page is not set up yet: FUNCTION_URL is missing (see SETUP.md).');
+  let res, data;
+  try {
+    res = await fetch(FUNCTION_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify(body) });
+  } catch (e) {
+    throw new Error('Could not reach the upload service. Check your connection and try again.');
+  }
+  try { data = await res.json(); } catch (_) { data = {}; }
+  if (res.status === 401) {         // expired / invalid sign-in
+    signOut(); const err = new Error((data.error || 'Your sign-in expired.') + ' Please sign in again.'); throw err;
+  }
+  if (!res.ok) { const err = new Error(data.error || `The upload service returned an error (${res.status}).`); err.status = res.status; err.data = data; throw err; }
+  return data;
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(new Error('The file could not be read.'));
+    fr.readAsDataURL(file);
+  });
+}
+
+async function doPreview() {
+  const f = $('file').files[0]; if (!f) return;
+  if (!/\.xlsx$/i.test(f.name)) { say('err', 'Choose an Excel workbook (.xlsx).'); return; }
+  $('preview-btn').disabled = true;
+  say('ok', `<span class="spinner"></span>Reading <b>${esc(f.name)}</b> and checking it against the RVS layer…`);
+  try {
+    const r = await api({ action: 'preview', filename: f.name, file_b64: await fileToBase64(f) });
+    uploadId = r.upload_id; say();
+    render(r.summary, r.filename, true);
+  } catch (e) {
+    say('err', esc(e.message));
+  } finally { $('preview-btn').disabled = !$('file').files.length; }
+}
+
+async function doConfirm() {
+  if (!uploadId) return;
+  $('confirm-btn').disabled = true; $('again-btn').disabled = true;
+  say('ok', '<span class="spinner"></span>Saving to the RVS layer…');
+  try {
+    const r = await api({ action: 'confirm', upload_id: uploadId });
+    uploadId = null; render(r.summary, r.filename, false);
+    const s = r.summary;
+    say(s.failed ? 'warn' : 'ok', s.failed
+      ? `Saved with problems: ${s.failed} building(s) failed - see the red rows below.`
+      : `Saved: ${s.added} added, ${s.updated} updated${s.skipped ? `, ${s.skipped} skipped` : ''}.`);
+  } catch (e) {
+    if (e.status === 409 && e.data && e.data.summary) {      // layer changed since the preview
+      render(e.data.summary, e.data.filename, true);
+    }
+    say(e.status === 409 ? 'warn' : 'err', esc(e.message));
+  } finally { $('confirm-btn').disabled = false; $('again-btn').disabled = false; }
+}
+
+// ── Rendering ──────────────────────────────────────────────────────────────
+function render(s, filename, isPreview) {
+  lastSummary = s;
+  show('result', true); step(isPreview ? 3 : 4);
+  $('res-title').textContent = isPreview ? `Preview: ${filename}` : `Saved: ${filename}`;
+  const v = isPreview ? ['To add', 'To update'] : ['Added', 'Updated'];
+  $('stats').innerHTML = `<div><b>${s.added}</b>${v[0]}</div><div><b>${s.updated}</b>${v[1]}</div>`
+    + `<div><b>${s.skipped}</b>Skipped</div>` + (isPreview ? '' : `<div><b>${s.failed}</b>Failed</div>`)
+    + `<div><b>${s.items.filter(i => (i.warnings || []).length).length}</b>With notes</div>`;
+  $('res-meta').textContent = `${s.l1_rows} Level 1 rows · ${s.l2_rows} Level 2 rows · ${s.merged} buildings · layer: ${s.layer || '-'} · ${s.seconds}s`;
+  $('notes').innerHTML = (s.notes || []).length
+    ? `<div class="banner warn" style="margin-top:12px"><b>Merge notes</b><ul class="warns">${s.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : '';
+  drawRows(isPreview);
+  const canSave = isPreview && (s.added + s.updated) > 0;
+  show('confirm-btn', canSave);
+  $('confirm-hint').textContent = isPreview
+    ? (canSave ? 'Nothing has been saved yet. Review the notes, then save.' : 'Nothing to save from this workbook.')
+    : 'Notes are also saved on each building in its upload_notes field.';
+  $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function drawRows(isPreview) {
+  const s = lastSummary; if (!s) return;
+  const only = $('only-warn').checked;
+  const label = { add: 'Add', update: 'Update', skipped: 'Skipped', failed: 'Failed' };
+  $('rows').innerHTML = s.items.filter(it => !only || (it.warnings || []).length || it.error).map(it => {
+    const failed = it.error && it.action !== 'skipped' && !isPreview;
+    const act = failed ? 'failed' : it.action;
+    const text = (isPreview && (act === 'add' || act === 'update')) ? 'Would ' + label[act].toLowerCase() : label[act];
+    const notes = (it.error ? `<div class="err-line">${esc(it.error)}</div>` : '')
+      + ((it.warnings || []).length ? `<ul class="warns">${it.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '');
+    return `<tr><td>${esc(it.facility)}</td><td>${esc(it.building)}</td><td><span class="pill p-${act}">${esc(text)}</span></td>`
+      + `<td>${esc(it.objectid ?? '')}</td><td>${notes || '&mdash;'}</td></tr>`;
+  }).join('') || '<tr><td colspan="5">No buildings to show.</td></tr>';
+}
+function startOver() {
+  uploadId = null; lastSummary = null; $('file').value = ''; $('preview-btn').disabled = true;
+  show('result', false); say(); step(2); window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Wiring ─────────────────────────────────────────────────────────────────
+$('auth-btn').onclick = () => token ? signOut() : signIn();
+$('gate-btn').onclick = signIn;
+$('file').onchange = () => { $('preview-btn').disabled = !$('file').files.length; };
+$('preview-btn').onclick = doPreview;
+$('confirm-btn').onclick = doConfirm;
+$('again-btn').onclick = startOver;
+$('only-warn').onchange = () => drawRows(!!uploadId);
+
+(function init() {
+  step(1);
+  const h = new URLSearchParams(window.location.hash.slice(1));
+  const tok = h.get('access_token');
+  if (tok) {
+    history.replaceState(null, '', redirectUri());          // drop the token from the address bar
+    if (window.opener && window.opener !== window) {        // popup branch: hand the token to the page and close
+      try { window.opener.postMessage({ type: 'rvs_upload_oauth', access_token: tok }, window.location.origin); window.close(); return; } catch (_) {}
+    }
+    completeSignIn(tok); return;
+  }
+  if (h.get('error')) { say('err', 'Sign-in was cancelled or failed. Try again.'); }
+  window.addEventListener('message', e => {
+    if (e.origin === window.location.origin && e.data && e.data.type === 'rvs_upload_oauth') completeSignIn(e.data.access_token);
+  });
+  let saved = null; try { saved = sessionStorage.getItem(TOKEN_KEY); } catch (_) {}
+  if (saved) completeSignIn(saved);
+})();
+</script>
+</body>
+</html>
