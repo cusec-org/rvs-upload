@@ -24,7 +24,7 @@
   .btn.ghost { background: transparent; border: 1.5px solid rgba(255,255,255,.4); color: #fff; padding: 6px 14px; font-weight: 500; }
   .btn.save { background: var(--green); }
   .btn.plain { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
-  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 16px; }
   h2 { font-size: 17px; margin-bottom: 8px; }
   p { line-height: 1.5; color: var(--text-2); }
@@ -52,6 +52,9 @@
   .warns { margin: 0; padding-left: 16px; color: var(--text-2); }
   .warns li { margin: 2px 0; line-height: 1.4; }
   .err-line { color: var(--bad); }
+  .sc { white-space: nowrap; line-height: 1.5; }
+  .sc .k { color: var(--text-3); display: inline-block; min-width: 34px; }
+  .was { color: var(--amber); font-size: 12px; }
   .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
   .filter { font-size: 13px; color: var(--text-2); display: flex; gap: 6px; align-items: center; margin-top: 12px; }
   .hidden { display: none !important; }
@@ -105,7 +108,7 @@
     <label class="filter"><input type="checkbox" id="only-warn" /> Show only buildings with notes or errors</label>
     <div class="tbl-wrap" style="margin-top:10px">
       <table>
-        <thead><tr><th>Facility</th><th>Building</th><th>Result</th><th>OBJECTID</th><th>Notes / warnings</th></tr></thead>
+        <thead><tr><th>Facility</th><th>Building</th><th>Result</th><th>OBJECTID</th><th>Seismicity · Type</th><th>Scores</th><th>Notes / warnings</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -251,6 +254,30 @@ function render(s, filename, isPreview) {
     : 'Notes are also saved on each building in its upload_notes field.';
   $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+// Seismicity region + FEMA type, and the Basic / Final Level 1 / Level 2 scores. For an update,
+// a value that differs from what the layer holds now is followed by "(was …)".
+const SEIS = { veryhigh: 'Very High', high: 'High', moderatelyhigh: 'Moderately High', moderate: 'Moderate', low: 'Low' };
+const seisLabel = v => SEIS[String(v ?? '').toLowerCase()] || (v ?? '');
+const num = v => (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v);
+const fmt = v => num(v) === null ? '-' : num(v).toFixed(1);
+function was(newV, oldV, isNum, show) {
+  if (oldV === undefined) return '';                       // added building: nothing to compare with
+  const same = isNum ? (num(newV) === null ? num(oldV) === null : num(oldV) !== null && Math.abs(num(newV) - num(oldV)) < 0.05)
+                     : String(newV ?? '') === String(oldV ?? '');
+  return same ? '' : ` <span class="was">(was ${esc(show(oldV) || '-')})</span>`;
+}
+function siteCell(it) {
+  const i = it.info || {}, c = it.current || {};
+  return `${esc(seisLabel(i.Seismicity) || '-')}${was(i.Seismicity, c.Seismicity, false, seisLabel)}`
+    + `<br>${esc(i.FEMABuildingType || '-')}${was(i.FEMABuildingType, c.FEMABuildingType, false, v => v)}`;
+}
+function scoreCell(it) {
+  const i = it.info || {}, c = it.current || {};
+  const line = (k, f) => `<span class="k">${k}</span>${fmt(i[f])}${was(i[f], c[f], true, fmt)}`;
+  const rows = [line('Basic', 'BasicScore'), line('SL1', 'Level1Score')];
+  if (num(i.Level2Score) !== null || num(c.Level2Score) !== null) rows.push(line('SL2', 'Level2Score'));
+  return `<div class="sc">${rows.join('<br>')}</div>`;
+}
 function drawRows(isPreview) {
   const s = lastSummary; if (!s) return;
   const only = $('only-warn').checked;
@@ -262,8 +289,9 @@ function drawRows(isPreview) {
     const notes = (it.error ? `<div class="err-line">${esc(it.error)}</div>` : '')
       + ((it.warnings || []).length ? `<ul class="warns">${it.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '');
     return `<tr><td>${esc(it.facility)}</td><td>${esc(it.building)}</td><td><span class="pill p-${act}">${esc(text)}</span></td>`
-      + `<td>${esc(it.objectid ?? '')}</td><td>${notes || '&mdash;'}</td></tr>`;
-  }).join('') || '<tr><td colspan="5">No buildings to show.</td></tr>';
+      + `<td>${esc(it.objectid ?? '')}</td><td style="white-space:nowrap">${siteCell(it)}</td><td>${scoreCell(it)}</td>`
+      + `<td>${notes || '&mdash;'}</td></tr>`;
+  }).join('') || '<tr><td colspan="7">No buildings to show.</td></tr>';
 }
 function startOver() {
   uploadId = null; lastSummary = null; $('file').value = ''; $('preview-btn').disabled = true;
