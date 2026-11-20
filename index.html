@@ -251,7 +251,8 @@ function render(s, filename, isPreview) {
   show('confirm-btn', canSave);
   $('confirm-hint').textContent = isPreview
     ? (canSave ? 'Nothing has been saved yet. Review the notes, then save.' : 'Nothing to save from this workbook.')
-    : 'Notes are also saved on each building in its upload_notes field.';
+    : (s.added ? 'New buildings are in the QA/QC phase: review them and add attachments in the RVS Summary app, then move them to Complete. ' : '')
+      + 'Notes are also saved on each building in its upload_notes field.';
   $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 // Seismicity region + FEMA type, and the Basic / Final Level 1 / Level 2 scores. For an update,
