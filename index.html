@@ -108,7 +108,7 @@
     <label class="filter"><input type="checkbox" id="only-warn" /> Show only buildings with notes or errors</label>
     <div class="tbl-wrap" style="margin-top:10px">
       <table>
-        <thead><tr><th>Facility</th><th>Building</th><th>Result</th><th>OBJECTID</th><th>Seismicity · Type</th><th>Scores</th><th>Notes / warnings</th></tr></thead>
+        <thead><tr><th>Facility</th><th>Building</th><th>Result</th><th>OBJECTID</th><th>County · Seismicity · Type</th><th>Scores</th><th>Notes / warnings</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -268,7 +268,9 @@ function was(newV, oldV, isNum, show) {
 }
 function siteCell(it) {
   const i = it.info || {}, c = it.current || {};
-  return `${esc(seisLabel(i.Seismicity) || '-')}${was(i.Seismicity, c.Seismicity, false, seisLabel)}`
+  const county = i.County ? esc(i.County) : '<span class="was">no county</span>';
+  return `${county}${was(i.County, c.County, false, v => v)}`
+    + `<br>${esc(seisLabel(i.Seismicity) || '-')}${was(i.Seismicity, c.Seismicity, false, seisLabel)}`
     + `<br>${esc(i.FEMABuildingType || '-')}${was(i.FEMABuildingType, c.FEMABuildingType, false, v => v)}`;
 }
 function scoreCell(it) {
