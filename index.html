@@ -58,6 +58,9 @@
   .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
   .filter { font-size: 13px; color: var(--text-2); display: flex; gap: 6px; align-items: center; margin-top: 12px; }
   .hidden { display: none !important; }
+  .who { display: block; font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
+  #client { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; min-width: 320px; max-width: 100%; background: #fff; }
+  .cl { color: var(--blue); font-weight: 600; }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (max-width: 640px) { header { padding: 0 16px; } header h1 { font-size: 14px; } #user-name { display: none; } }
@@ -90,9 +93,16 @@
 
   <!-- Choose workbook -->
   <section class="card hidden" id="choose">
-    <h2>Choose the CWL RVS workbook</h2>
+    <h2>Choose the RVS workbook</h2>
     <p>The workbook needs the <b>Level 1 Data</b> and <b>Level 2 Data</b> tabs. Nothing is saved at this step:
        you'll see exactly what would be added or updated first.</p>
+    <label class="who" for="client">Who are these buildings for?</label>
+    <select id="client">
+      <option value="" disabled selected>Choose…</option>
+      <option value="__program__">State / County program (no private client)</option>
+    </select>
+    <p class="meta" id="client-help">A private client's buildings are marked with the client, so only that client (and CUSEC)
+       sees them; the State and County don't.</p>
     <div class="pick">
       <input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
       <button class="btn" id="preview-btn" type="button" disabled>Preview</button>
@@ -169,7 +179,9 @@ async function completeSignIn(tok) {
     const r = await api({ action: 'whoami' });
     $('user-name').textContent = r.user.fullName;
     try { sessionStorage.setItem(USER_KEY, r.user.fullName); } catch (_) {}
-    say(); show('choose', true); step(2);
+    fillClients(r.clients || []);
+    say(r.clients_error ? 'warn' : '', r.clients_error ? esc(r.clients_error) + ' Only the State / County program can be chosen.' : '');
+    show('choose', true); step(2);
   } catch (e) {
     say('err', esc(e.message)); show('gate', !token); if (!token) step(1);
   }
@@ -201,18 +213,31 @@ function fileToBase64(file) {
   });
 }
 
+// The client choice: State / County program, or a private client from the RVS Access table
+function fillClients(list) {
+  const keep = $('client').value;
+  $('client').innerHTML = '<option value="" disabled>Choose…</option><option value="__program__">State / County program (no private client)</option>'
+    + (list.length ? `<optgroup label="Private clients">${list.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</optgroup>` : '');
+  $('client').value = [...$('client').options].some(o => o.value === keep && keep) ? keep : '';
+  syncPreviewBtn();
+}
+const clientChoice = () => $('client').value === '__program__' ? '' : $('client').value;
+const clientName = () => $('client').value === '__program__' ? '' : ($('client').selectedOptions[0] || {}).textContent || '';
+function syncPreviewBtn() { $('preview-btn').disabled = !$('file').files.length || !$('client').value; }
+
 async function doPreview() {
   const f = $('file').files[0]; if (!f) return;
+  if (!$('client').value) { say('err', 'Choose who these buildings are for first.'); return; }
   if (!/\.xlsx$/i.test(f.name)) { say('err', 'Choose an Excel workbook (.xlsx).'); return; }
   $('preview-btn').disabled = true;
   say('ok', `<span class="spinner"></span>Reading <b>${esc(f.name)}</b> and checking it against the RVS layer…`);
   try {
-    const r = await api({ action: 'preview', filename: f.name, file_b64: await fileToBase64(f) });
+    const r = await api({ action: 'preview', filename: f.name, file_b64: await fileToBase64(f), client_id: clientChoice() });
     uploadId = r.upload_id; say();
     render(r.summary, r.filename, true);
   } catch (e) {
     say('err', esc(e.message));
-  } finally { $('preview-btn').disabled = !$('file').files.length; }
+  } finally { syncPreviewBtn(); }
 }
 
 async function doConfirm() {
@@ -243,7 +268,8 @@ function render(s, filename, isPreview) {
   $('stats').innerHTML = `<div><b>${s.added}</b>${v[0]}</div><div><b>${s.updated}</b>${v[1]}</div>`
     + `<div><b>${s.skipped}</b>Skipped</div>` + (isPreview ? '' : `<div><b>${s.failed}</b>Failed</div>`)
     + `<div><b>${s.items.filter(i => (i.warnings || []).length).length}</b>With notes</div>`;
-  $('res-meta').textContent = `${s.l1_rows} Level 1 rows · ${s.l2_rows} Level 2 rows · ${s.merged} buildings · layer: ${s.layer || '-'} · ${s.seconds}s`;
+  $('res-meta').innerHTML = `For: ${s.client ? `<span class="cl">${esc(s.client.name)}</span> (private client)` : '<b>State / County program</b> (no private client)'}<br>`
+    + esc(`${s.l1_rows} Level 1 rows · ${s.l2_rows} Level 2 rows · ${s.merged} buildings · layer: ${s.layer || '-'} · ${s.seconds}s`);
   $('notes').innerHTML = (s.notes || []).length
     ? `<div class="banner warn" style="margin-top:12px"><b>Merge notes</b><ul class="warns">${s.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : '';
   drawRows(isPreview);
@@ -270,7 +296,13 @@ function was(newV, oldV, isNum, show) {
 function siteCell(it) {
   const i = it.info || {}, c = it.current || {};
   const county = i.County ? esc(i.County) : '<span class="was">no county</span>';
-  return `${county}${was(i.County, c.County, false, v => v)}`
+  // client line only when one is involved; "(was none)" when an existing building is being marked
+  // (a skipped building shows who it belongs to now)
+  const who = it.action === 'skipped' ? it.current_client : (it.client || it.current_client);
+  const cl = who
+    ? `<br><span class="cl">${esc(who)}</span>${it.action !== 'skipped' && it.current !== undefined && (it.current_client || null) !== (it.client || null)
+        ? ` <span class="was">(was ${esc(it.current_client || 'no client')})</span>` : ''}` : '';
+  return `${county}${was(i.County, c.County, false, v => v)}${cl}`
     + `<br>${esc(seisLabel(i.Seismicity) || '-')}${was(i.Seismicity, c.Seismicity, false, seisLabel)}`
     + `<br>${esc(i.FEMABuildingType || '-')}${was(i.FEMABuildingType, c.FEMABuildingType, false, v => v)}`;
 }
@@ -304,7 +336,8 @@ function startOver() {
 // ── Wiring ─────────────────────────────────────────────────────────────────
 $('auth-btn').onclick = () => token ? signOut() : signIn();
 $('gate-btn').onclick = signIn;
-$('file').onchange = () => { $('preview-btn').disabled = !$('file').files.length; };
+$('file').onchange = syncPreviewBtn;
+$('client').onchange = syncPreviewBtn;
 $('preview-btn').onclick = doPreview;
 $('confirm-btn').onclick = doConfirm;
 $('again-btn').onclick = startOver;
